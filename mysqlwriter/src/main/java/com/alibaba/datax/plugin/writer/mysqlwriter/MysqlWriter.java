@@ -21,6 +21,7 @@ public class MysqlWriter extends Writer {
         @Override
         public void preCheck(){
             this.init();
+            // 数据库公共 PreCheck
             this.commonRdbmsWriterJob.writerPreCheck(this.originalConfig, DATABASE_TYPE);
         }
 
