@@ -137,6 +137,7 @@
         <module>gaussdbwriter</module>
         <module>datax-example</module>
         <module>minio-writer</module>
+        <module>kafkawriter</module>
 
     </modules>
 
