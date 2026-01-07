@@ -93,12 +93,15 @@ public class OssWriter extends Writer {
         public void init() {
             this.writerSliceConfig = this.getPluginJobConf();
             this.basicValidateParameter();
+            // 文件格式
             this.fileFormat = this.writerSliceConfig.getString(
                     com.alibaba.datax.plugin.unstructuredstorage.writer.Key.FILE_FORMAT,
                     com.alibaba.datax.plugin.unstructuredstorage.writer.Constant.FILE_FORMAT_TEXT);
+            // 编码
             this.encoding = this.writerSliceConfig.getString(
                     com.alibaba.datax.plugin.unstructuredstorage.writer.Key.ENCODING,
                     com.alibaba.datax.plugin.unstructuredstorage.writer.Constant.DEFAULT_ENCODING);
+            // orc 和 parquet 使用 HDFS Writer
             this.useHdfsWriterProxy  = HdfsParquetUtil.isUseHdfsWriterProxy(this.fileFormat);
             if(useHdfsWriterProxy){
                 this.hdfsWriterJob = new HdfsWriter.Job();
@@ -111,6 +114,7 @@ public class OssWriter extends Writer {
                 this.hdfsWriterJob.init();
                 return;
             }
+
             this.peerPluginJobConf = this.getPeerPluginJobConf();
             this.isBinaryFile = FileFormat.getFileFormatByConfiguration(this.peerPluginJobConf).isBinary();
             this.syncMode = this.writerSliceConfig
@@ -371,8 +375,9 @@ public class OssWriter extends Writer {
                 return;
             }
             if (this.writeSingleObject) {
+                // 写入单个文件
                 try {
-                    /**1. 合并上传最后一个block*/
+                    // 第一步：合并上传最后一个block
                     LOG.info("Has upload part size: {}", OssSingleObject.allPartETags.size());
                     if (OssSingleObject.getLastBlockBuffer() != null && OssSingleObject.getLastBlockBuffer().length != 0) {
                         byte[] byteBuffer = OssSingleObject.getLastBlockBuffer();
@@ -388,7 +393,7 @@ public class OssWriter extends Writer {
                         return;
                     }
 
-                    /**2. 完成complete upload */
+                    // 第二步：完成 complete upload
                     LOG.info("begin complete multi part upload, bucket:{}, object:{}, uploadId:{}, all has upload part size:{}",
                             this.bucket, this.object, OssSingleObject.uploadId, OssSingleObject.allPartETags.size());
                     orderPartETages(OssSingleObject.allPartETags);
@@ -434,6 +439,7 @@ public class OssWriter extends Writer {
 
         @Override
         public void destroy() {
+            // destroy 完成 Job 对象自身的销毁工作
             if(useHdfsWriterProxy){
                 this.hdfsWriterJob.destroy();
                 return;
