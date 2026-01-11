@@ -80,9 +80,9 @@ public class KafkaWriter {
         private Producer<String, String> producer;
         private String fieldDelimiter;
         private String writeMode;
-        private Integer keyIndex;
+        private String keyIndexStr;
         private String nullKeyFormat;
-        private Integer valueIndex;
+        private String valueIndexStr;
         private String nullValueFormat;
         private String ack;
         private Integer batchSize;
@@ -99,16 +99,16 @@ public class KafkaWriter {
             this.conf = super.getPluginJobConf();
             fieldDelimiter = conf.getUnnecessaryValue(Key.FIELD_DELIMITER, "\t", null);
             writeMode = conf.getUnnecessaryValue(Key.WRITE_MODE, "text", null);
-            keyIndex = Integer.parseInt(conf.getString(Key.KEY_INDEX));
+            keyIndexStr = conf.getString(Key.KEY_INDEX);
             nullKeyFormat = conf.getString(Key.NULL_KEY_FORMAT);
-            valueIndex = Integer.parseInt(conf.getUnnecessaryValue(Key.VALUE_INDEX, null, null));
+            valueIndexStr = conf.getString(Key.VALUE_INDEX);
             nullValueFormat = conf.getString(Key.NULL_VALUE_FORMAT);
             ack = conf.getUnnecessaryValue(Key.ACK, "all", null);
-            batchSize = Integer.parseInt(conf.getUnnecessaryValue(Key.BATCH_SIZE, "1024", null));
+            batchSize = conf.getInt(Key.BATCH_SIZE, 1024);
             columns = conf.getString(Key.COLUMN);
 
             log.info("task init params, fieldDelimiter: {}, writeMode: {}, keyIndex: {}, nullKeyFormat: {}, valueIndex: {}, nullValueFormat: {}, ack: {}, batchSize: {}, columns: {}",
-                    fieldDelimiter, writeMode, keyIndex, nullKeyFormat, valueIndex, nullValueFormat, ack, batchSize, columns);
+                    fieldDelimiter, writeMode, keyIndexStr, nullKeyFormat, valueIndexStr, nullValueFormat, ack, batchSize, columns);
 
             // 参数校验
             validateParameter();
@@ -143,24 +143,31 @@ public class KafkaWriter {
                         String.format("acks only supports 0、1 and all, does not support the acks mode you configured: %s", ack));
             }
 
-            // keyIndex、valueIndex 校验 如果配置了，参数取值范围是大于等于0的整数
-            if (keyIndex < 0) {
-                throw DataXException.asDataXException(
-                        KafkaWriterErrorCode.ILLEGAL_VALUE,
-                        String.format("如果配置 keyIndex，参数取值范围必须是大于等于0的整数: %s", keyIndex));
-            }
-            if (valueIndex < 0) {
-                throw DataXException.asDataXException(
-                        KafkaWriterErrorCode.ILLEGAL_VALUE,
-                        String.format("如果配置 valueIndex，参数取值范围必须是大于等于0的整数: %s", valueIndex));
-            }
-
-            // columns 当未配置 valueIndex，并且 writeMode 配置为 JSON 时必选
-            if (Objects.equals(valueIndex, null) && Objects.equals(writeMode, Key.JSON)) {
-                if (StringUtils.isBlank(columns)) {
+            // keyIndex、valueIndex 校验
+            if (!Objects.equals(keyIndexStr, null)) {
+                // 配置了 keyIndex 则必须是大于等于0的整数
+                if (!StringUtils.isNumeric(keyIndexStr) || Integer.parseInt(keyIndexStr) < 0) {
                     throw DataXException.asDataXException(
-                            KafkaWriterErrorCode.REQUIRED_VALUE,
-                            "当未配置 valueIndex，并且 writeMode 配置为 JSON 时必选");
+                            KafkaWriterErrorCode.ILLEGAL_VALUE,
+                            String.format("如果配置 keyIndex，参数取值范围必须是大于等于0的整数: %s", keyIndexStr));
+                }
+            }
+            if (!Objects.equals(valueIndexStr, null)) {
+                // 配置 valueIndex，必须是大于等于0的整数
+                if (!StringUtils.isNumeric(valueIndexStr) || Integer.parseInt(valueIndexStr) < 0) {
+                    throw DataXException.asDataXException(
+                            KafkaWriterErrorCode.ILLEGAL_VALUE,
+                            String.format("如果配置 valueIndex，参数取值范围必须是大于等于0的整数: %s", valueIndexStr));
+                }
+            } else {
+                // 未配置 valueIndex
+                if (Objects.equals(writeMode, Key.JSON)) {
+                    // writeMode 配置为 JSON 时 columns 必选
+                    if (StringUtils.isBlank(columns)) {
+                        throw DataXException.asDataXException(
+                                KafkaWriterErrorCode.REQUIRED_VALUE,
+                                "当未配置 valueIndex，并且 writeMode 配置为 JSON 时 columns 必选");
+                    }
                 }
             }
         }
@@ -191,10 +198,11 @@ public class KafkaWriter {
 
         //  写入 Kafka 记录的 Key
         private String recordKey(Record record) {
-            if (Objects.equals(keyIndex, null)) {
+            if (Objects.equals(keyIndexStr, null)) {
                 // 如果不填写，写入 Kafka 记录 Key 为null
                 return null;
             }
+            int keyIndex = Integer.parseInt(keyIndexStr);
             int columnNumber = record.getColumnNumber();
             if (keyIndex >= columnNumber) {
                 // 超过 Kafka 记录下标
@@ -215,38 +223,35 @@ public class KafkaWriter {
             // 2.1 当配置 text 时，将所有列按照fieldDelimiter指定分隔符拼接
             // 2.2 当配置 json 时，将所有列按照 column 参数指定字段名称拼接为JSON字符串
             // 3. 当源端列值为 null 时，组装写入kafka记录Value时替换为 nullValueFormat 配置项指定的字符串，如果不配置不作替换。
-            String value = null;
-            if (!Objects.equals(valueIndex, null)) {
-                // 当配置 valueIndex 时，读取对应列作为 Value
-                Column column = record.getColumn(valueIndex);
-                value = column.asString();
-            } else if (Objects.equals(writeMode, Key.TEXT)) {
-                // 当未配置 valueIndex 时，使用 writeMode 配置项决定将源端读取记录的所有列拼接作为写入 Kafka 记录 Value 的格式
-                // 当配置 text 时，将所有列按照fieldDelimiter指定分隔符拼接
-                int recordLength = record.getColumnNumber();
-                if (0 == recordLength) {
-                    return NEWLINE_FLAG;
+            if (!Objects.equals(valueIndexStr, null)) {
+                // 1. 当配置 valueIndex 时，读取对应列作为 Value
+                Column column = record.getColumn(Integer.parseInt(valueIndexStr));
+                String value = column.asString();
+                // 当源端列值为 null 时，组装写入 kafka 记录 Value 时替换为 nullValueFormat 配置项指定的字符串
+                return Objects.equals(value, null) ? nullValueFormat : value;
+            } else {
+                // 2. 当未配置 valueIndex 时，使用 writeMode 配置项决定将源端读取记录的所有列拼接作为写入 Kafka 记录 Value 的格式
+                if (Objects.equals(writeMode, Key.TEXT)) {
+                    // 2.1 当 writeMode 配置 text 时，将所有列按照 fieldDelimiter 指定分隔符拼接
+                    int recordLength = record.getColumnNumber();
+                    Column column;
+                    String value;
+                    StringBuilder sb = new StringBuilder();
+                    for (int i = 0; i < recordLength; i++) {
+                        column = record.getColumn(i);
+                        value = column.asString();
+                        // 当源端列值为 null 时，组装写入 kafka 记录 Value 时替换为 nullValueFormat 配置项指定的字符串
+                        sb.append(Objects.equals(value, null) ? nullValueFormat : value)
+                                .append(fieldDelimiter);
+                    }
+                    sb.setLength(sb.length() - 1);
+                    return sb.toString();
+                } else {
+                    // 2.2 当 writeMode 配置 json 时，将所有列按照 column 参数指定字段名称拼接为JSON字符串
+                    List<JsonMappingConfig> jsonMappingConfigs = JsonUtil.parseMappingConfig(columns);
+                    return JsonUtil.convertRecordToJson(record, jsonMappingConfigs, nullValueFormat);
                 }
-                Column column;
-                StringBuilder sb = new StringBuilder();
-                for (int i = 0; i < recordLength; i++) {
-                    column = record.getColumn(i);
-                    sb.append(column.asString()).append(fieldDelimiter);
-                }
-                sb.setLength(sb.length() - 1);
-                sb.append(NEWLINE_FLAG);
-                value = sb.toString();
-            } else if (Objects.equals(writeMode, Key.JSON)) {
-                // 当未配置 valueIndex 时，使用 writeMode 配置项决定将源端读取记录的所有列拼接作为写入 Kafka 记录 Value 的格式
-                // 当配置 json 时，将所有列按照 column 参数指定字段名称拼接为JSON字符串
-                List<JsonMappingConfig> jsonMappingConfigs = JsonUtil.parseMappingConfig(columns);
-                return JsonUtil.convertRecordToJson(record, jsonMappingConfigs);
             }
-            // 当源端列值为 null 时，组装写入 kafka 记录 Value 时替换为 nullValueFormat 配置项指定的字符串。
-            if (Objects.equals(value, null)) {
-                value = nullValueFormat;
-            }
-            return value;
         }
 
         /**
