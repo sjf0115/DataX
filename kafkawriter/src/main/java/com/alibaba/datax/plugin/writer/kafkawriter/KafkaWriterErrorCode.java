@@ -10,7 +10,8 @@ import com.alibaba.datax.common.spi.ErrorCode;
  * 日期：2026/1/7 22:52
  */
 public enum KafkaWriterErrorCode implements ErrorCode {
-    REQUIRED_VALUE("KafkaWriter-00", "Required parameter is not filled .")
+    REQUIRED_VALUE("KafkaWriter-00", "Required parameter is not filled ."),
+    ILLEGAL_VALUE("KafkaWriter-01", "输入参数非法")
     ;
 
     private final String code;

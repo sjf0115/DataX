@@ -224,7 +224,7 @@ public class MinIOWriter extends Writer {
 
         @Override
         public void post() {
-            if (this.writeSingleObject) {
+            /*if (this.writeSingleObject) {
                 // 写入单个文件
                 try {
                     // 第一步：合并上传最后一个block
@@ -243,7 +243,7 @@ public class MinIOWriter extends Writer {
                         return;
                     }
 
-                    /**2. 完成complete upload */
+                    *//**2. 完成complete upload *//*
                     LOG.info("begin complete multi part upload, bucket:{}, object:{}, uploadId:{}, all has upload part size:{}",
                             this.bucket, this.object, OssSingleObject.uploadId, OssSingleObject.allPartETags.size());
                     orderPartETages(OssSingleObject.allPartETags);
@@ -255,7 +255,7 @@ public class MinIOWriter extends Writer {
                     LOG.error("osswriter post error: {}", e.getMessage(), e);
                     throw DataXException.asDataXException(e.getMessage());
                 }
-            }
+            }*/
         }
 
         @Override
@@ -332,7 +332,7 @@ public class MinIOWriter extends Writer {
          * @return
          */
         private List<Configuration> doSplitForWriteSingleObject(int mandatoryNumber) {
-            LOG.info("writeSingleObject is true, begin do split for write single object.");
+            /*LOG.info("writeSingleObject is true, begin do split for write single object.");
             List<Configuration> writerSplitConfigs = new ArrayList<Configuration>();
             String object = this.writerSliceConfig.getString(MinIOConstant.OBJECT);
 
@@ -346,10 +346,10 @@ public class MinIOWriter extends Writer {
                 LOG.error("initiateMultipartUpload error: {}", e.getMessage(), e);
                 throw DataXException.asDataXException(e.getMessage());
             }
-            /**
+            *//**
              *
              * see: https://help.aliyun.com/document_detail/31993.html
-             */
+             *//*
             // 如果需要写同一个object，需要保证使用同一个upload Id
             String uploadId = uploadResult.getUploadId();
             OssSingleObject.uploadId = uploadId;
@@ -362,7 +362,8 @@ public class MinIOWriter extends Writer {
                 splitedTaskConfig.set(Key.UPLOAD_ID, uploadId);
                 writerSplitConfigs.add(splitedTaskConfig);
             }
-            return writerSplitConfigs;
+            return writerSplitConfigs;*/
+            return null;
         }
 
         /**
